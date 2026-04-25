@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ASTRA INFINITUM — 1:1 scale space simulator. Launch from Sriharikota, achieve orbit, dock with ISS. Built with Three.js, TypeScript, and physically-accurate RK4 integration." />
+  <title>ASTRA INFINITUM — 1:1 Scale Space Simulator</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --hud-green:  #00ff9d;
+      --hud-amber:  #ffb800;
+      --hud-red:    #ff3b30;
+      --hud-blue:   #0af;
+      --hud-purple: #9d4edd;
+      --hud-bg:     rgba(0, 6, 18, 0.80);
+      --hud-border: rgba(0, 255, 157, 0.22);
+      --font-mono:  'Share Tech Mono', monospace;
+      --font-ui:    'Rajdhani', sans-serif;
+      --font-head:  'Orbitron', sans-serif;
+    }
+
+    html, body { width:100%; height:100%; overflow:hidden; background:#000005; font-family:var(--font-ui); color:var(--hud-green); user-select:none; }
+    canvas { display:block; }
+
+    /* ── HUD ─────────────────────────────────────────── */
+    #hud { position:fixed; inset:0; pointer-events:none; z-index:10; }
+
+    /* ── Telemetry (top-left) ────────────────────────── */
+    #telemetry {
+      position:absolute; top:24px; left:24px;
+      background:var(--hud-bg);
+      border:1px solid var(--hud-border);
+      border-radius:6px;
+      padding:16px 20px;
+      min-width:280px;
+      backdrop-filter:blur(14px);
+      -webkit-backdrop-filter:blur(14px);
+      clip-path:polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+      box-shadow: 0 0 30px rgba(0,255,157,0.07);
+    }
+    #telemetry .panel-title {
+      font-family:var(--font-head);
+      font-size:10px; letter-spacing:3px; color:rgba(0,255,157,.4);
+      text-transform:uppercase; margin-bottom:14px;
+    }
+    .hud-label { font-family:var(--font-mono); font-size:9px; letter-spacing:2px; color:rgba(0,255,157,.45); text-transform:uppercase; margin-bottom:2px; }
+    .hud-value { font-family:var(--font-mono); font-size:21px; color:var(--hud-green); letter-spacing:1px; line-height:1.1; text-shadow:0 0 14px rgba(0,255,157,.55); }
+    .hud-row { margin-bottom:13px; }
+    .hud-row:last-child { margin-bottom:0; }
+    .sep { height:1px; background:var(--hud-border); margin:12px 0; }
+
+    /* ── Fuel bar ─────────────────────────────────────── */
+    #fuel-panel { margin-top:14px; }
+    #fuel-bar-bg { width:100%; height:5px; background:rgba(255,255,255,.07); border-radius:3px; overflow:hidden; margin:6px 0 4px; }
+    #fuel-bar-fill { height:100%; background:linear-gradient(90deg,#00ff9d,#0af); border-radius:3px; width:100%; transition:width .25s linear, background .4s; box-shadow:0 0 8px rgba(0,255,157,.4); }
+    #stage-name { font-family:var(--font-mono); font-size:9px; color:rgba(0,255,157,.45); letter-spacing:1px; margin-bottom:4px; }
+
+    /* ── Velocity panel (top-right) ──────────────────── */
+    #vel-panel {
+      position:absolute; top:24px; right:24px;
+      background:var(--hud-bg);
+      border:1px solid var(--hud-border);
+      border-radius:6px;
+      padding:14px 18px; width:230px;
+      backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+      clip-path:polygon(18px 0, 100% 0, 100% 100%, 0 100%, 0 18px);
+      box-shadow: 0 0 30px rgba(0,255,157,0.07);
+    }
+    #vel-bar-bg { width:100%; height:5px; background:rgba(255,255,255,.07); border-radius:3px; overflow:hidden; }
+    #vel-bar-fill { height:100%; background:linear-gradient(90deg,#00ff9d,#0af); border-radius:3px; width:0%; transition:width .15s linear, background .3s; box-shadow:0 0 8px rgba(0,255,157,.4); }
+    #vel-value { font-family:var(--font-mono); font-size:20px; color:var(--hud-green); margin-top:8px; text-shadow:0 0 12px rgba(0,255,157,.6); }
+    #orbital-info { margin-top:12px; font-family:var(--font-mono); font-size:10px; color:rgba(0,255,157,.55); line-height:1.8; }
+
+    /* ── Docking HUD ─────────────────────────────────── */
+    #docking-hud {
+      position:absolute; top:24px; right:280px;
+      background:var(--hud-bg);
+      border:1px solid rgba(0,170,255,.35);
+      border-radius:6px;
+      padding:12px 18px; width:200px;
+      backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+      font-family:var(--font-mono); font-size:10px; color:var(--hud-blue);
+      opacity:0; transition:opacity .5s;
+      box-shadow: 0 0 20px rgba(0,170,255,0.15);
+    }
+    #docking-hud.active { opacity:1; }
+    #docking-hud .dock-title { font-size:9px; letter-spacing:2px; margin-bottom:10px; color:rgba(0,170,255,.6); }
+    .dock-row { display:flex; justify-content:space-between; margin-bottom:6px; }
+    /* Target lead reticle */
+    #dock-reticle {
+      width:60px; height:60px; border:1px solid rgba(0,170,255,.4);
+      border-radius:50%; margin:10px auto; position:relative;
+    }
+    #dock-pip {
+      width:8px; height:8px; background:var(--hud-blue);
+      border-radius:50%; position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      box-shadow:0 0 8px var(--hud-blue);
+      transition:top .1s, left .1s;
+    }
+
+    /* ── Alert bar (bottom-center) ───────────────────── */
+    #alert-bar {
+      position:absolute; bottom:32px; left:50%; transform:translateX(-50%);
+      background:rgba(0,6,18,.92);
+      border:1px solid var(--hud-border);
+      border-radius:4px; padding:10px 30px;
+      font-family:var(--font-mono); font-size:12px; letter-spacing:3px;
+      text-transform:uppercase; opacity:0; transition:opacity .4s, border-color .3s, color .3s, box-shadow .3s;
+      white-space:nowrap; text-align:center; backdrop-filter:blur(8px);
+    }
+    #alert-bar.active  { opacity:1; }
+    #alert-bar.warn     { color:var(--hud-amber); border-color:var(--hud-amber); box-shadow:0 0 20px rgba(255,184,0,.3); }
+    #alert-bar.critical { color:var(--hud-red);   border-color:var(--hud-red);   box-shadow:0 0 20px rgba(255,59,48,.4); animation:blink .6s infinite; }
+    #alert-bar.info     { color:var(--hud-blue);  border-color:var(--hud-blue);  box-shadow:0 0 20px rgba(0,170,255,.3); }
+    #alert-bar.success  { color:var(--hud-green); border-color:var(--hud-green); box-shadow:0 0 20px rgba(0,255,157,.3); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    /* ── Controls hint (bottom-left) ─────────────────── */
+    #controls-hint {
+      position:absolute; bottom:24px; left:24px;
+      font-family:var(--font-mono); font-size:9px;
+      color:rgba(0,255,157,.3); line-height:2.0; letter-spacing:1px;
+    }
+
+    /* ── Mode indicator (bottom-right) ──────────────── */
+    #mode-indicator { position:absolute; bottom:24px; right:24px; font-family:var(--font-mono); font-size:10px; letter-spacing:2px; color:rgba(0,255,157,.45); text-align:right; }
+    #mode-indicator .mode-name { font-family:var(--font-head); font-size:16px; font-weight:700; color:var(--hud-green); text-shadow:0 0 14px rgba(0,255,157,.5); }
+
+    /* ── Plasma overlay ──────────────────────────────── */
+    #plasma-overlay { position:fixed; inset:0; pointer-events:none; opacity:0; z-index:5; mix-blend-mode:screen; background:radial-gradient(ellipse at 50% 60%, rgba(255,80,0,.55) 0%, rgba(255,40,0,.3) 30%, rgba(255,0,50,.12) 60%, transparent 80%); transition:opacity .5s; }
+
+    /* ── Warp canvas ─────────────────────────────────── */
+    #warp-canvas { position:fixed; inset:0; pointer-events:none; z-index:4; opacity:0; transition:opacity .5s; }
+
+    /* ── Crosshair ───────────────────────────────────── */
+    #crosshair { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:24px; height:24px; pointer-events:none; z-index:9; opacity:.45; }
+    #crosshair::before,#crosshair::after { content:''; position:absolute; background:var(--hud-green); }
+    #crosshair::before { width:1px; height:100%; left:50%; top:0; }
+    #crosshair::after  { height:1px; width:100%; top:50%; left:0; }
+
+    /* ── Loading screen ──────────────────────────────── */
+    #loading { position:fixed; inset:0; background:#000005; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; transition:opacity 1s; }
+    #loading h1 { font-family:var(--font-head); font-size:52px; font-weight:900; letter-spacing:10px; color:var(--hud-green); text-shadow:0 0 40px rgba(0,255,157,.7),0 0 80px rgba(0,255,157,.3); margin-bottom:6px; }
+    #loading .subtitle { font-family:var(--font-mono); font-size:11px; letter-spacing:4px; color:rgba(0,255,157,.4); margin-bottom:50px; }
+    #loading-bar-bg { width:360px; height:2px; background:rgba(255,255,255,.08); border-radius:1px; overflow:hidden; }
+    #loading-bar-fill { height:100%; background:linear-gradient(90deg,#00ff9d,#0af); width:0%; transition:width .3s; box-shadow:0 0 12px rgba(0,255,157,.9); }
+    #loading-status { font-family:var(--font-mono); font-size:10px; color:rgba(0,255,157,.35); margin-top:16px; letter-spacing:2px; }
+    #loading .version { position:absolute; bottom:24px; font-family:var(--font-mono); font-size:9px; color:rgba(0,255,157,.2); letter-spacing:2px; }
+  </style>
+</head>
+<body>
+
+  <!-- Loading screen -->
+  <div id="loading">
+    <h1>ASTRA INFINITUM</h1>
+    <p class="subtitle">1:1 SCALE SPACE SIMULATOR &nbsp;·&nbsp; SRIHARIKOTA LAUNCH SITE</p>
+    <div id="loading-bar-bg"><div id="loading-bar-fill"></div></div>
+    <div id="loading-status">INITIALIZING PHYSICS ENGINE…</div>
+    <div class="version">BUILD 2.0 &nbsp;·&nbsp; THREE.JS &nbsp;·&nbsp; TYPESCRIPT &nbsp;·&nbsp; RK4 INTEGRATOR</div>
+  </div>
+
+  <!-- Three.js canvas -->
+  <canvas id="canvas"></canvas>
+
+  <!-- Warp streak overlay -->
+  <canvas id="warp-canvas"></canvas>
+
+  <!-- Plasma reentry overlay -->
+  <div id="plasma-overlay"></div>
+
+  <!-- Crosshair -->
+  <div id="crosshair"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+
+    <!-- Telemetry panel -->
+    <div id="telemetry">
+      <div class="panel-title">Mission Control &nbsp;·&nbsp; Telemetry</div>
+
+      <div class="hud-row">
+        <div class="hud-label">Altitude</div>
+        <div class="hud-value" id="alt-value">0.00 m</div>
+      </div>
+      <div class="sep"></div>
+
+      <div class="hud-row">
+        <div class="hud-label">Speed</div>
+        <div class="hud-value" id="spd-value">0.0 m/s</div>
+      </div>
+      <div class="sep"></div>
+
+      <div class="hud-row">
+        <div class="hud-label">Vertical Rate</div>
+        <div class="hud-value" id="vrate-value">+0.0 m/s</div>
+      </div>
+      <div class="sep"></div>
+
+      <div class="hud-row">
+        <div class="hud-label">Dynamic Pressure</div>
+        <div class="hud-value" id="dynq-value">0 Pa</div>
+      </div>
+      <div class="sep"></div>
+
+      <!-- Fuel -->
+      <div id="fuel-panel">
+        <div id="stage-name">STAGE 1 — MERLIN 9×</div>
+        <div class="hud-label">Propellant</div>
+        <div id="fuel-bar-bg"><div id="fuel-bar-fill"></div></div>
+        <div class="hud-value" style="font-size:14px;" id="fuel-value">100.0%</div>
+      </div>
+    </div>
+
+    <!-- Velocity panel -->
+    <div id="vel-panel">
+      <div class="hud-label">Velocity (% Orbital)</div>
+      <div id="vel-bar-bg"><div id="vel-bar-fill"></div></div>
+      <div id="vel-value">0.0 m/s</div>
+      <div id="orbital-info">
+        <div>ISS DIST: <span id="iss-dist">—</span></div>
+        <div>WARP:     <span id="warp-factor">1×</span></div>
+        <div>G-FORCE:  <span id="gforce">1.00 g</span></div>
+      </div>
+    </div>
+
+    <!-- Docking HUD -->
+    <div id="docking-hud">
+      <div class="dock-title">◈ ISS DOCKING APPROACH ◈</div>
+      <div class="dock-row">
+        <span>RANGE</span><span id="dock-dist">—</span>
+      </div>
+      <div class="dock-row">
+        <span>REL-V</span><span id="dock-relv">—</span>
+      </div>
+      <div id="dock-reticle">
+        <div id="dock-pip"></div>
+      </div>
+    </div>
+
+    <!-- Alert bar -->
+    <div id="alert-bar">◈ SYSTEM NOMINAL ◈</div>
+
+    <!-- Controls hint -->
+    <div id="controls-hint">
+      W/S — PITCH &nbsp; A/D — YAW<br>
+      Q/E — ROLL &nbsp; SPACE — THRUST<br>
+      SHIFT — WARP &nbsp; R — RETRO<br>
+      X — STAGE SEP &nbsp; C — CAMERA<br>
+      ESC — PAUSE
+    </div>
+
+    <!-- Mode indicator -->
+    <div id="mode-indicator">
+      <div style="font-size:9px;letter-spacing:2px;margin-bottom:4px;">FLIGHT MODE</div>
+      <div class="mode-name" id="mode-name">PAD</div>
+    </div>
+
+  </div><!-- /hud -->
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
