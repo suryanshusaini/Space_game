@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { planetVertexShader, planetFragmentShader } from './Shaders';
+import { planetVertexShader, planetFragmentShader } from './gameShaders';
 
 // ── Minimal 3-D noise (Value noise for speed) ──────────────────────────────
 function hash3(x: number, y: number, z: number): number {

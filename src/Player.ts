@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import type { StateVec } from './physics';
 import { atmosphericPressure } from './physics';
-import { plumeVertexShader, plumeFragmentShader } from './Shaders';
+import { plumeVertexShader, plumeFragmentShader } from './gameShaders';
 
 // ── Rocket stage definitions ───────────────────────────────────────────────
 export interface Stage {

@@ -20,7 +20,7 @@ import {
   starVertexShader, starFragmentShader,
   sunVertexShader, sunFragmentShader,
   issVertexShader, issFragmentShader,
-} from './Shaders';
+} from './gameShaders';
 import {
   rk4Step, keplerianToCartesian,
   ISS_ELEMENTS, EARTH_RADIUS,
